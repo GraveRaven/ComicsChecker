@@ -74,21 +74,30 @@ func checkComic(c comic, comicsPipe chan comic, browser string, wg *sync.WaitGro
 	resp, err := http.Get(c.URL)
 	if err != nil {
 		log.Printf("Unable to fetch %s: %s\n", c.URL, err)
-	}
-	defer resp.Body.Close()
 
-	scanner := bufio.NewScanner(resp.Body)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if strings.Contains(line, c.Match) {
-			if line != c.Last {
-				openComic(c.URL, browser)
-				c.Last = line
-				break
+	} else {
+		defer resp.Body.Close()
+
+		found := false
+
+		scanner := bufio.NewScanner(resp.Body)
+		for scanner.Scan() {
+			line := strings.TrimSpace(scanner.Text())
+			if strings.Contains(line, c.Match) {
+				found = true
+				if line != c.Last {
+					openComic(c.URL, browser)
+					c.Last = line
+					break
+				}
 			}
 		}
+
+		if found == false {
+			fmt.Printf("Didn't find %s\n", c.URL)
+		}
+		comicsPipe <- c
 	}
-	comicsPipe <- c
 	<-throttle
 	wg.Done()
 }
@@ -97,7 +106,7 @@ func main() {
 
 	comicsFile := "comics.txt"
 	maxConcurrentRequests := 10
-	browser := "firefox"
+	browser := "chrome"
 	newline := []byte{'\r', '\n'}
 	if runtime.GOOS != "windows" {
 		newline = []byte{'\n'}
@@ -124,7 +133,6 @@ func main() {
 		newContent = append(newContent, []byte(c.Last)...)
 		newContent = append(newContent, newline...)
 	}
-
 	err = ioutil.WriteFile(comicsFile, newContent, 644)
 	if err != nil {
 		log.Fatalf("Unable to save comics file\n")
